@@ -1,0 +1,56 @@
+name: Build and Push Docker Image to Custom Registry
+on:
+  workflow_dispatch:
+    inputs:
+      free_space:
+        description: 'Free disk space before building'
+        type: boolean
+        default: false
+      repo_url:
+        description: 'HTTP(S) git repo url with Dockerfile'
+        required: true
+        default: 'https://github.com/foxglove/nuscenes2mcap.git'
+      docker_url:
+        description: 'Target Docker registry URL with tag (e.g., registry.example.com/myimage:latest)'
+        required: true
+        default: 'xx-acr-registry.cn-shanghai.cr.aliyuncs.com/ai-infra/dreamzero:latest'
+
+jobs:
+  build_and_push:
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
+
+    - name: Free Disk Space (Ubuntu)
+      if: ${{ github.event.inputs.free_space == 'true' }}
+      uses: jlumbroso/free-disk-space@main
+      with:
+        tool-cache: false
+        android: true
+        dotnet: true
+        haskell: true
+        large-packages: true
+        docker-images: true
+        swap-storage: true
+
+    - name: Login to Docker registry
+      uses: docker/login-action@v4
+      with:
+        registry: ${{ secrets.DOCKER_REGISTRY }}
+        username: ${{ secrets.DOCKER_USERNAME }}
+        password: ${{ secrets.DOCKER_PASSWORD }}
+
+    - name: Clone git repo and build docker image
+      run: |
+        repo_url="${{ github.event.inputs.repo_url }}"
+        git clone ${repo_url} repo
+        cd repo
+        docker build . -t repo:latest
+
+    - name: Push to custom registry
+      run: |
+        docker_url="${{ github.event.inputs.docker_url }}"
+        docker tag repo:latest "$docker_url"
+        docker push "$docker_url"
